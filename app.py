@@ -13,7 +13,7 @@ def load_zero_shot_model():
 def call_groq_llm(messages):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {st.secrets['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']}",
+        "Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}",
         "Content-Type": "application/json"
     }
     payload = {
@@ -100,3 +100,4 @@ with tab2:
         # Mostrar respuesta
         with st.chat_message("assistant"):
             st.markdown(assistant_reply)
+
