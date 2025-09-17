@@ -2,36 +2,16 @@ import streamlit as st
 from transformers import pipeline
 import pandas as pd
 import requests
-import os
 
 # ----------- Carga del modelo Zero-Shot una vez -----------
 @st.cache_resource
 def load_zero_shot_model():
     return pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-# ----------- Función para llamar a la API de Groq -----------
-def call_groq_llm(messages):
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "llama3-8b-8192",
-        "messages": messages,
-        "temperature": 0.7
-    }
-
-    response = requests.post(url, headers=headers, json=payload)
-
-    if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
-    else:
-        return f"❌ Error {response.status_code}: {response.text}"
-
 
 # ----------- Interfaz con pestañas (Ejercicio 1 y 2) -----------
 tab1, tab2 = st.tabs(["🧠 Clasificador Zero-Shot", "🤖 Chatbot con Memoria"])
+
 
 # ======================= EJERCICIO 1 =======================
 with tab1:
@@ -64,40 +44,69 @@ with tab1:
                 st.dataframe(df)
                 st.bar_chart(df.set_index("Etiqueta"))
 
+
 # ======================= EJERCICIO 2 =======================
 with tab2:
     st.title("🤖 Chatbot Conversacional con Memoria (Groq + LLaMA3)")
 
-    # Inicializar historial en session_state
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = [
-            {"role": "system", "content": "Eres un asistente útil que responde preguntas del usuario."}
-        ]
+    # Campo para ingresar la API key
+    if "GROQ_API_KEY" not in st.session_state:
+        st.session_state.GROQ_API_KEY = ""
 
-    # Mostrar historial
-    for msg in st.session_state.chat_history[1:]:  # omitimos el system prompt
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    api_key_input = st.text_input(
+        "🔐 Ingresa tu Groq API Key:",
+        type="password",
+        value=st.session_state.GROQ_API_KEY,
+        help="Puedes obtenerla en https://console.groq.com/"
+    )
 
-    # Input del usuario
-    user_input = st.chat_input("Escribe tu mensaje aquí...")
+    # Guardar la clave en la sesión si se ingresa
+    if api_key_input:
+        st.session_state.GROQ_API_KEY = api_key_input.strip()
 
-    if user_input:
-        # Agregar el mensaje del usuario
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
+    # Validar que la API key esté presente
+    if not st.session_state.GROQ_API_KEY:
+        st.warning("Por favor ingresa tu Groq API Key para usar el chatbot.")
+    else:
+        # Inicializar historial en session_state
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = [
+                {"role": "system", "content": "Eres un asistente útil que responde preguntas del usuario."}
+            ]
 
-        # Mostrar el mensaje del usuario
-        with st.chat_message("user"):
-            st.markdown(user_input)
+        # Mostrar historial
+        for msg in st.session_state.chat_history[1:]:  # omitimos el system prompt
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-        # Llamar a Groq
-        with st.spinner("Pensando..."):
-            assistant_reply = call_groq_llm(st.session_state.chat_history)
+        # Input del usuario
+        user_input = st.chat_input("Escribe tu mensaje aquí...")
 
-        # Agregar respuesta del modelo
-        st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
+        if user_input:
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            with st.chat_message("user"):
+                st.markdown(user_input)
 
-        # Mostrar respuesta
-        with st.chat_message("assistant"):
-            st.markdown(assistant_reply)
+            # Llamada a la API usando la clave ingresada
+            with st.spinner("Pensando..."):
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {st.session_state.GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "llama3-8b-8192",
+                    "messages": st.session_state.chat_history,
+                    "temperature": 0.7
+                }
 
+                response = requests.post(url, headers=headers, json=payload)
+
+                if response.status_code == 200:
+                    reply = response.json()["choices"][0]["message"]["content"]
+                else:
+                    reply = f"❌ Error {response.status_code}: {response.text}"
+
+            st.session_state.chat_history.append({"role": "assistant", "content": reply})
+            with st.chat_message("assistant"):
+                st.markdown(reply)
